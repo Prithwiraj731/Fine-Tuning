@@ -12,8 +12,8 @@ This table provides a quick overview of each project, with direct links to the c
 
 | Project | Base Model | Code Location (GitHub) | Final Model (Hugging Face) |
 | :--- | :--- | :--- | :--- |
-| **Medical Dialogue Summarizer** 🧑‍⚕️ | `microsoft/phi-2` | [./Medical_Phi2/](./Medical_Phi2/) | 🤗 [**Prithwiraj731/Medical-Phi2-GGUF**](https://huggingface.co/Prithwiraj731/Medical-Phi2-GGUF) |
-| **Motorcycle & Law Assistant** 🏍️ | `microsoft/phi-2` | [./MotoData_Phi2/](./MotoData_Phi2/) | 🤗 [**Prithwiraj731/MotoData-Phi2-GGUF**](https://huggingface.co/Prithwiraj731/MotoData-Phi2-GGUF) |
+| **Medical Dialogue Summarizer** 🧑‍⚕️ | `microsoft/phi-2` | [./Medical_Phi2/](./Medical_Phi2/) |  [**Prithwiraj731/Medical-Phi2-GGUF**](https://huggingface.co/Prithwiraj731/Medical-Phi2-GGUF) |
+| **Motorcycle & Law Assistant** 🏍️ | `microsoft/phi-2` | [./MotoData_Phi2/](./MotoData_Phi2/) |  [**Prithwiraj731/MotoData-Phi2-GGUF**](https://huggingface.co/Prithwiraj731/MotoData-Phi2-GGUF) |
 | *(Soon)* | *(Base Model)* | *(#)* | *(#)* |
 
 ---
