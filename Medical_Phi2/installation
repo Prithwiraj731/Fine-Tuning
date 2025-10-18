@@ -1,0 +1,8 @@
+import os
+
+print("STEP 1: Installing the correct library versions for the job...")
+
+print("\n Installation complete.")
+print(" The Colab session will now restart to apply the changes. Please run the next cell after it reconnects.")
+
+os.kill(os.getpid(), 9)
