@@ -1,0 +1,21 @@
+# Ignore large model files
+*.gguf
+*.safetensors
+*.bin
+
+# Ignore model/adapter directories
+merged_IndianLaw_gemma2b_model_fp16/
+fine_tuned_IndianLaw_gemma2b_adapter/
+gguf_models/
+
+# Ignore temporary conversion folders
+gguf_conversion_output/
+training_output/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore Colab-specific files
+.config/
+sample_data/
