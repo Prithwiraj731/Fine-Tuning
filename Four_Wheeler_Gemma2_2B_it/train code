@@ -1,0 +1,171 @@
+# ==============================================================================
+#  FOUR WHEELER GEMMA 2B - FINE TUNING SCRIPT (FIXED & FULL)
+# ==============================================================================
+
+# 1. MOUNT GOOGLE DRIVE
+# ------------------------------------------------------------------------------
+from google.colab import drive
+drive.mount('/content/drive')
+
+import os
+# Define where everything will be saved in your Drive
+drive_base_path = "/content/drive/MyDrive/Gemma2B_FourWheeler_Fixed"
+gguf_path = os.path.join(drive_base_path, "gguf_versions")
+os.makedirs(drive_base_path, exist_ok=True)
+os.makedirs(gguf_path, exist_ok=True)
+
+print(f"✅ Drive Mounted. Output will be saved to: {drive_base_path}")
+
+# 2. INSTALL LIBRARIES
+# ------------------------------------------------------------------------------
+print("⏳ Installing Unsloth and dependencies (this takes about 2 mins)...")
+# Note: Using the specific unsloth colab install to prevent dependency conflicts
+!pip install --upgrade --no-cache-dir "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+!pip install --no-deps trl peft accelerate bitsandbytes datasets
+
+# 3. IMPORTS & SETUP
+# ------------------------------------------------------------------------------
+import torch
+from unsloth import FastLanguageModel
+from datasets import load_dataset
+from trl import SFTTrainer, SFTConfig
+from unsloth.chat_templates import get_chat_template
+
+# 4. LOAD MODEL (GEMMA 2B INSTRUCT)
+# ------------------------------------------------------------------------------
+max_seq_length = 2048
+dtype = None # Auto-detect (Float16 for T4, BF16 for Ampere)
+load_in_4bit = True
+
+print("⏳ Loading Gemma-2-2b-it model...")
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name = "google/gemma-2-2b-it",
+    max_seq_length = max_seq_length,
+    dtype = dtype,
+    load_in_4bit = load_in_4bit,
+)
+
+# Add LoRA Adapters (This makes the model learnable)
+model = FastLanguageModel.get_peft_model(
+    model,
+    r = 16,
+    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
+                      "gate_proj", "up_proj", "down_proj",],
+    lora_alpha = 16,
+    lora_dropout = 0,
+    bias = "none",
+    use_gradient_checkpointing = "unsloth",
+    random_state = 3407,
+    use_rslora = False,
+    loftq_config = None,
+)
+
+# 5. PREPARE DATASET (THE CRITICAL FIX)
+# ------------------------------------------------------------------------------
+# We use the JSONL file you provided
+dataset_file = "Four_Wheeler_Dataset_Cleaned.jsonl"
+
+if not os.path.exists(dataset_file):
+    raise FileNotFoundError(f"❌ ERROR: Please upload '{dataset_file}' to the Colab Files tab!")
+
+print("⏳ Loading and Formatting Dataset...")
+dataset = load_dataset("json", data_files = dataset_file, split = "train")
+
+# Apply the Official Gemma Chat Template
+# This fixes the </s> issue and ensures the model knows it's a chatbot.
+tokenizer = get_chat_template(
+    tokenizer,
+    chat_template = "gemma",
+)
+
+def formatting_prompts_func(examples):
+    # Using your specific keys: "question" and "answer"
+    inputs       = examples["question"]
+    outputs      = examples["answer"]
+    texts = []
+
+    for input_text, output_text in zip(inputs, outputs):
+        conversation = [
+            {"role": "user", "content": input_text},
+            {"role": "assistant", "content": output_text},
+        ]
+        # This function adds <start_of_turn>user ... <end_of_turn> automatically
+        text = tokenizer.apply_chat_template(
+            conversation,
+            tokenize = False,
+            add_generation_prompt = False
+        )
+        texts.append(text)
+
+    return { "text" : texts }
+
+dataset = dataset.map(formatting_prompts_func, batched = True)
+
+# Quick check to ensure formatting is correct
+print(f"✅ Dataset Loaded. Sample:\n{dataset[0]['text'][:100]}...")
+
+# 6. TRAINING
+# ------------------------------------------------------------------------------
+print("🚀 Starting Training...")
+trainer = SFTTrainer(
+    model = model,
+    tokenizer = tokenizer,
+    train_dataset = dataset,
+    dataset_text_field = "text",
+    max_seq_length = max_seq_length,
+    dataset_num_proc = 2,
+    packing = False,
+    args = SFTConfig(
+        per_device_train_batch_size = 2,
+        gradient_accumulation_steps = 4,
+        warmup_steps = 5,
+        max_steps = 60, # Adjust based on dataset size (60 is good for small tests)
+        learning_rate = 2e-4,
+        fp16 = not torch.cuda.is_bf16_supported(),
+        bf16 = torch.cuda.is_bf16_supported(),
+        logging_steps = 1,
+        optim = "adamw_8bit",
+        weight_decay = 0.01,
+        lr_scheduler_type = "linear",
+        seed = 3407,
+        output_dir = "outputs",
+    ),
+)
+
+trainer_stats = trainer.train()
+print("✅ Training Complete.")
+
+# 7. SAVE EVERYTHING TO GOOGLE DRIVE
+# ------------------------------------------------------------------------------
+print("💾 Saving files to Google Drive... Do not close the tab!")
+
+# A. SAVE MERGED 16-BIT MODEL (For Hugging Face / Server)
+# This saves: config.json, model.safetensors, tokenizer.json, special_tokens_map.json
+print(f"   -> Saving Standard Merged Model (16-bit) to: {drive_base_path}")
+model.save_pretrained_merged(
+    drive_base_path,
+    tokenizer,
+    save_method = "merged_16bit",
+)
+
+# B. SAVE GGUF Q4_K_M (For Mobile / Ollama - Small size)
+print(f"   -> Saving GGUF (q4_k_m) to: {gguf_path}")
+model.save_pretrained_gguf(
+    gguf_path,
+    tokenizer,
+    quantization_method = "q4_k_m"
+)
+
+# C. SAVE GGUF F16 (For High Precision - Large size)
+print(f"   -> Saving GGUF (f16) to: {gguf_path}")
+model.save_pretrained_gguf(
+    gguf_path,
+    tokenizer,
+    quantization_method = "f16"
+)
+
+print("\n" + "="*50)
+print("🎉 ALL DONE!")
+print(f"1. Standard Model folder: {drive_base_path}")
+print(f"2. GGUF Files folder:     {gguf_path}")
+print("="*50)
